@@ -1,70 +1,154 @@
 import React from "react";
+import "bootstrap/dist/css/bootstrap.min.css";
+
 import Lists from "./Lists";
+import CreateList from "./CreateList";
 
 class App extends React.Component {
   constructor(props) {
     super(props);
 
-    // local state (课件说 constructor 里已定义)
     this.state = {
-      loading: true,
       alldata: [],
-      error: null
+      loading: false,
+      singledata: {
+        title: "",
+        author: "",
+      },
     };
   }
 
-  // handler: called by onClick
+  // GET all
   getLists = () => {
-    this.setState({ loading: true, error: null });
+    this.setState({ loading: true });
 
     fetch("http://localhost:5000/posts")
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`Request failed: ${res.status} ${res.statusText}`);
-        }
-        return res.json();
-      })
-      .then((result) => {
+      .then((res) => res.json())
+      .then((json) => {
         this.setState({
+          alldata: json,
           loading: false,
-          alldata: result
         });
       })
       .catch((err) => {
-        console.log(err);
-        this.setState({
-          loading: false,
-          error: err.message || "Unknown error"
-        });
+        console.log("GET lists error:", err);
+        this.setState({ loading: false });
       });
   };
 
+  // shared onChange handler for Create/Update
+  handleChange = (event) => {
+    const { name, value } = event.target;
+
+    this.setState((prev) => ({
+      singledata: {
+        ...prev.singledata,
+        [name]: value,
+      },
+    }));
+  };
+
+  // POST create
+  createList = () => {
+    fetch("http://localhost:5000/posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(this.state.singledata),
+    })
+      .then((res) => res.json())
+      .then(() => {
+        // clear form + refresh list
+        this.setState({
+          singledata: { title: "", author: "" },
+        });
+        this.getLists();
+      })
+      .catch((err) => console.log("POST error:", err));
+  };
+
+  // GET single item by id (for Update modal preload)
+  getList = (event, id) => {
+    // optional: prevent default if needed
+    if (event && event.preventDefault) event.preventDefault();
+
+    // show loading text in modal fields while fetching
+    this.setState({
+      singledata: { title: "Loading...", author: "Loading..." },
+    });
+
+    fetch(`http://localhost:5000/posts/${id}`)
+      .then((res) => res.json())
+      .then((json) => {
+        this.setState({
+          singledata: {
+            title: json.title ?? "",
+            author: json.author ?? "",
+          },
+        });
+      })
+      .catch((err) => console.log("GET single error:", err));
+  };
+
+  // PUT update
+  updateList = (event, id) => {
+    if (event && event.preventDefault) event.preventDefault();
+
+    fetch(`http://localhost:5000/posts/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(this.state.singledata),
+    })
+      .then((res) => res.json())
+      .then(() => {
+        // refresh list after update
+        this.getLists();
+      })
+      .catch((err) => console.log("PUT error:", err));
+  };
+
+  // DELETE
+  deleteList = (event, id) => {
+    if (event && event.preventDefault) event.preventDefault();
+
+    fetch(`http://localhost:5000/posts/${id}`, {
+      method: "DELETE",
+    })
+      .then(() => {
+        // refresh list after delete
+        this.getLists();
+      })
+      .catch((err) => console.log("DELETE error:", err));
+  };
+
   render() {
-    const { loading, alldata, error } = this.state;
+    const listTable = this.state.loading ? (
+      <p>Loading...</p>
+    ) : (
+      <Lists
+        alldata={this.state.alldata}
+        getList={this.getList}
+        updateList={this.updateList}
+        deleteList={this.deleteList}
+        singledata={this.state.singledata}
+        handleChange={this.handleChange}
+      />
+    );
 
     return (
-      <div className="container" style={{ paddingTop: "24px" }}>
-        {/* title bar (你课件里有这个 span) */}
-        <span className="title-bar" style={{ display: "block", marginBottom: "12px" }}>
-          <h2 style={{ margin: 0 }}>CRUD JSON Server Demo</h2>
-        </span>
+      <div className="container mt-5">
+        <h2 className="mb-3">CRUD JSON Server</h2>
 
-        {/* button (课件红框) */}
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={this.getLists}
-          style={{ marginBottom: "16px" }}
-        >
+        <button className="btn btn-primary me-2" onClick={this.getLists}>
           Get Lists
         </button>
 
-        {/* status */}
-        {loading && <p>Loading...</p>}
-        {error && <p style={{ color: "red" }}>{error}</p>}
+        <CreateList
+          singledata={this.state.singledata}
+          handleChange={this.handleChange}
+          createList={this.createList}
+        />
 
-        {/* call child component (把 state 传给 Lists) */}
-        {!loading && !error && <Lists alldata={alldata} />}
+        <div className="mt-4">{listTable}</div>
       </div>
     );
   }
